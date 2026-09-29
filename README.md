@@ -1,8 +1,8 @@
-# TE·OS Chrome New Tab
+<img width="636" height="440" alt="image" src="https://github.com/user-attachments/assets/54ebe485-3e8c-4b63-917d-b7dc7cf0ae69" /># TE·OS Chrome New Tab
 
-一个以原页面为基础的 Chrome 新标签页扩展，提供搜索、时间、天气、日历和可自定义快捷方式。
+一个以teenage engineering设计为灵感的 Chrome 新标签页扩展，提供搜索、时间、天气、日历和可自定义快捷方式。
+A Chrome new tab extension inspired by teenage engineering design, offering search, time, weather, calendar, and customizable shortcuts.
 
-A Chrome new tab extension based on the original dashboard, with search, clock, weather, calendar, and customizable shortcuts.
 
 ## 截图 · Screenshots
 
