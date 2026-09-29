@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TE·OS — New Tab</title>
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="stylesheet" href="fonts.css">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="ambient" aria-hidden="true"></div>
+<div class="scanbar" aria-hidden="true"></div>
+
+<div class="shell">
+  <div class="rail">
+    <span class="led"></span><span><b>TE·OS</b></span><span class="sep">/</span>
+    <span data-i18n="model">Dashboard · Model 01</span><span class="sep">/</span><span>Rev. C</span>
+    <span class="grow"></span><span id="railClock">--:--:--</span><span class="sep">/</span>
+    <span id="railSig">▮▮▮</span><span class="sep">/</span><span class="led grn"></span><span data-i18n="link">LINK</span>
+  </div>
+
+  <header class="masthead">
+    <div>
+      <div class="clock dsp"><span id="clkH">00</span><span class="cln">:</span><span id="clkM">00</span><span class="ss" id="clkS">00</span></div>
+      <div class="mline"><span id="mDate">—</span><span class="dot"></span><span id="mWeek">—</span><span class="dot"></span><span id="mCity">—</span></div>
+      <div class="greet" id="mGreet">Good morning<span>, Aiko</span><i>.</i></div>
+    </div>
+    <div class="mh-right">
+      <div class="keyrow">
+        <button class="key" id="langBtn" data-i18n-title="lang_tip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.6 2.6 2.6 15.4 0 18M12 3c-2.6 2.6-2.6 15.4 0 18"/></svg><span>EN</span></button>
+        <button class="key" id="unitBtn" data-i18n-title="tip_unit"><span>°C</span></button>
+        <button class="key" id="fmtBtn" data-i18n-title="tip_clock"><span>24H</span></button>
+        <button class="sw" id="themeBtn" aria-label="Toggle theme"><span class="tr"><span data-i18n="theme_light">LGT</span><span data-i18n="theme_dark">DK</span></span><span class="knob">◐</span></button>
+        <button class="key" id="setBtn" aria-expanded="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.2 5.2l2.1 2.1M16.7 16.7l2.1 2.1M18.8 5.2l-2.1 2.1M7.3 16.7l-2.1 2.1"/></svg><span data-i18n="setup">Setup</span></button>
+      </div>
+      <div class="drawer" id="drawer">
+        <div class="dw-h"><b data-i18n="setup">SETUP</b><span>MENU 01 / 01</span></div>
+        <div class="drow"><label data-i18n="lbl_engine">Engine</label><div class="seg sm" data-group="engine"><span class="ind"></span><button data-val="google">Google</button><button data-val="bing">Bing</button></div></div>
+        <div class="drow block"><label data-i18n="lbl_location">Location</label>
+          <div class="locwrap">
+            <input type="text" id="locInput" data-i18n-ph="ph_loc" spellcheck="false" autocomplete="off">
+            <div class="geolist" id="geoList"></div>
+          </div>
+          <p class="geohint" data-i18n="geo_hint">Powered by Open-Meteo geocoding</p>
+          <div class="chiprow" id="presetChips"></div>
+        </div>
+        <div class="drow"><label data-i18n="lbl_units">Units</label><div class="seg sm" data-group="unit"><span class="ind"></span><button data-val="C">°C</button><button data-val="F">°F</button></div></div>
+        <div class="drow"><label data-i18n="lbl_clock">Clock</label><div class="seg sm" data-group="clock"><span class="ind"></span><button data-val="24">24H</button><button data-val="12">12H</button></div></div>
+        <div class="drow"><label data-i18n="lbl_theme">Theme</label><div class="seg sm" data-group="theme"><span class="ind"></span><button data-val="light" data-i18n="theme_bone">Bone</button><button data-val="dark" data-i18n="theme_graphite">Graphite</button></div></div>
+        <div class="drow"><label data-i18n="lbl_callsign">Call sign</label><input type="text" id="csInput" maxlength="14" value="Aiko" spellcheck="false" style="width:120px"></div>
+        <div class="dw-f"><span data-i18n="stored">Stored locally</span><button class="linkish" id="resetBtn"><span data-i18n="reset">Reset</span> ↺</button></div>
+      </div>
+    </div>
+  </header>
+
+  <section class="sz" data-reveal style="--d:.05s">
+    <div class="sz-head">
+      <span class="tag"><b>01</b> <span data-i18n="search_tag">Search</span></span>
+      <div class="seg engmode" id="engineSeg" data-group="engine"><span class="ind eng"></span><button data-val="google">Google</button><button data-val="bing">Bing</button></div>
+      <span class="tag"><span data-i18n="query_out">Query out</span> ↵</span>
+    </div>
+    <form class="sbx" id="searchForm" autocomplete="off">
+      <span class="sbx-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4L21 21"/></svg></span>
+      <input id="q" data-i18n-ph="ph_search" spellcheck="false" aria-label="Search query">
+      <span class="cnt" id="cnt">00 CH</span>
+      <button class="go" id="goBtn" type="submit">GOOGLE</button>
+    </form>
+    <p class="hint"><kbd>/</kbd> <span data-i18n="hint_focus">focus search</span> · <kbd>1</kbd>–<kbd>9</kbd> <span data-i18n="hint_launch">launch slot</span> · <kbd>esc</kbd> <span data-i18n="hint_release">release</span></p>
+  </section>
+
+  <div class="grid">
+    <section data-reveal style="--d:.12s">
+      <div class="p-head">
+        <span class="tag"><b>02</b> <span data-i18n="shortcuts_tag">Shortcuts</span></span>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span class="tag" id="slotCount">9 slots</span>
+          <button class="key" id="editBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M14 6l4 4"/></svg><span id="editLbl" data-i18n="edit">Edit</span></button>
+        </div>
+      </div>
+      <div class="tiles" id="tiles"></div>
+    </section>
+
+    <aside class="side">
+      <section class="panel pad" data-reveal style="--d:.18s">
+        <div class="p-head" style="margin-bottom:12px"><span class="tag"><b>03</b> <span data-i18n="weather_tag">Weather</span></span><span class="tag" id="wxUpd">SYNC…</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+          <div style="min-width:0"><div class="w-city" id="wxCity">Tokyo</div><div class="w-code" id="wxCode">RJTT · 35.68 / 139.69</div></div>
+          <button class="kb" id="locateBtn" data-i18n-title="locate"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9"><circle cx="12" cy="12" r="7"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/><path d="M12 1.5v3M12 19.5v3M1.5 12h3M19.5 12h3" stroke-linecap="round"/></svg></button>
+        </div>
+        <div class="w-main"><div class="w-temp dsp" id="wxTemp">--<sup>°</sup></div><div id="wxIcon"></div></div>
+        <div class="w-cond" id="wxCond">—</div>
+        <div class="w-hilo"><span><span data-i18n="hi">HI</span> <b id="wxHi">—</b></span><span><span data-i18n="lo">LO</span> <b id="wxLo">—</b></span><span><span data-i18n="wind">WIND</span> <b id="wxWind">—</b></span></div>
+        <div class="hours" id="wxHours"></div>
+      </section>
+
+      <section class="panel pad" data-reveal style="--d:.24s">
+        <div class="p-head">
+          <span class="tag"><b>04</b> <span data-i18n="calendar_tag">Calendar</span></span>
+          <div class="cal-nav"><button class="kb" id="prevM" aria-label="‹">‹</button><button class="kb wide" id="todayBtn" data-i18n="today">Today</button><button class="kb" id="nextM" aria-label="›">›</button></div>
+        </div>
+        <div class="lcd">
+          <span class="lc-lab lc-tl">CAL · DOT 5×7</span>
+          <span class="lc-lab lc-tr"><span class="lc-led"></span><span data-i18n="sync">SYNC</span></span>
+          <canvas id="heroCal" role="img" aria-label="Today"></canvas>
+          <div class="lcd-div"></div>
+          <canvas id="monthCal"></canvas>
+        </div>
+        <div class="cal-cap" id="calCaption">—</div>
+      </section>
+    </aside>
+  </div>
+
+  <footer class="chassis" data-reveal style="--d:.3s">
+    <span class="screw"></span>
+    <div class="read"><span><span data-i18n="sys">SYS</span> <b id="sysDate">—</b></span><span><span data-i18n="uptime">UPTIME</span> <b id="uptime">00:00:00</b></span></div>
+    <div class="grille"></div><div class="meter" id="meter"></div>
+    <div class="read" style="justify-content:flex-end"><span><span data-i18n="pwr">PWR</span> <b>5V · 0.4A</b></span><span>© 2026 TE·OS</span></div>
+    <span class="screw"></span>
+  </footer>
+</div>
+
+<script src="app.js" defer></script>
+</body>
+</html>

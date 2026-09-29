@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "TE·OS New Tab",
+  "version": "1.0.0",
+  "description": "A focused dashboard for your Chrome new tab.",
+  "chrome_url_overrides": {
+    "newtab": "index.html"
+  },
+  "host_permissions": [
+    "https://api.open-meteo.com/*",
+    "https://geocoding-api.open-meteo.com/*"
+  ],
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data: https://www.google.com https://*.gstatic.com; connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com"
+  }
+}
