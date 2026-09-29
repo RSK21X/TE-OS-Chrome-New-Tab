@@ -4,6 +4,12 @@
 
 A Chrome new tab extension based on the original dashboard, with search, clock, weather, calendar, and customizable shortcuts.
 
+## 截图 · Screenshots
+
+![TE·OS 新标签页上半部分 / Dashboard top](screenshots/teos-dashboard-top.png)
+
+![TE·OS 新标签页下半部分 / Dashboard bottom](screenshots/teos-dashboard-bottom.png)
+
 ## 功能 · Features
 
 - 搜索引擎可选 Google 或 Bing。 · Choose Google or Bing for search.
