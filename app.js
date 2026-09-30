@@ -76,11 +76,22 @@ const norm=value=>{
 };
 const host=value=>{const safe=norm(value);if(!safe)return String(value??'').trim().replace(/^https?:\/\//i,'');try{return new URL(safe).hostname.replace(/^www\./,'');}catch(e){return'';}};
 const favicon=value=>{const safe=norm(value);if(!safe)return'';return`https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(new URL(safe).origin)}&sz=64`;};
-S.slots=S.slots.slice(0,12).map((s,i)=>({n:String(s?.n??`Site ${i+1}`).slice(0,18),u:norm(s?.u??'')}));
+// Stable IDs also work for shortcuts saved by version 1.0.0.
+function readSlots(){const saved=store.get('slots',null),slots=Array.isArray(saved)?saved:DEF_SLOTS_INIT();
+ return slots.slice(0,12).map((s,i)=>({id:String(s?.id||`legacy-${i}`),n:String(s?.n??`Site ${i+1}`).slice(0,18),u:String(s?.u??'')}));}
+S.slots=readSlots();
+function mutateSlots(mutate){return navigator.locks.request('te01.slots',()=>{
+ const latest=readSlots(),before=JSON.stringify(latest);mutate(latest);S.slots=latest;
+ if(JSON.stringify(latest)!==before)save('slots');renderTiles();
+});}
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-let editing=false;
+let editing=false,renderingTiles=false;
 function renderTiles(){
  const c=$('#tiles');
+ const active=document.activeElement;
+ const focus=editing&&c.contains(active)&&active.dataset.f?{id:active.dataset.id,field:active.dataset.f,value:active.value,start:active.selectionStart,end:active.selectionEnd}:null;
+ renderingTiles=true;
+ try{
  if(!editing){
   c.innerHTML=S.slots.map((s,i)=>{
    const url=norm(s.u),name=String(s.n||'').trim()||host(s.u)||t('new_site');
@@ -90,32 +101,39 @@ function renderTiles(){
    <span class="nm">${esc(name)}</span><span class="dm">${esc(host(s.u))}</span></a>`;
   }).join('');
  }else{
-  let h=S.slots.map((s,i)=>`<div class="tile ed" data-i="${i}">
-   <button class="rm" data-rm="${i}" title="✕" aria-label="Remove ${esc(s.n)}">✕</button>
+  let h=S.slots.map((s,i)=>`<div class="tile ed" data-i="${i}" data-id="${esc(s.id)}">
+   <button class="rm" data-rm="${esc(s.id)}" title="✕" aria-label="Remove ${esc(s.n)}">✕</button>
    <div class="erow">
-    <input data-f="n" data-i="${i}" value="${esc(s.n)}" placeholder="${esc(t('ph_name'))}" maxlength="18" aria-label="Shortcut name">
-    <input data-f="u" data-i="${i}" value="${esc(s.u)}" placeholder="https://…" spellcheck="false" aria-label="Shortcut address">
+    <input data-f="n" data-id="${esc(s.id)}" value="${esc(s.n)}" placeholder="${esc(t('ph_name'))}" maxlength="18" aria-label="Shortcut name">
+    <input data-f="u" data-id="${esc(s.id)}" value="${esc(s.u)}" placeholder="https://…" spellcheck="false" aria-label="Shortcut address">
     <span class="ehost">${esc(host(s.u))||'—'}</span></div></div>`).join('');
   if(S.slots.length<12)h+=`<button class="tile add" id="addSlot" title="${esc(t('new_site'))}" aria-label="${esc(t('new_site'))}">+</button>`;
   c.innerHTML=h;
  }
  $('#slotCount').textContent=S.slots.length+' '+t('slots');
+ if(focus){const input=$$('input',c).find(el=>el.dataset.id===focus.id&&el.dataset.f===focus.field);
+  if(input){input.value=focus.value;input.focus({preventScroll:true});input.setSelectionRange(focus.start,focus.end);}}
+ }finally{renderingTiles=false;}
 }
 $('#tiles').addEventListener('click',e=>{
  const shortcut=e.target.closest('a.tile[data-i]');if(shortcut&&shortcut.getAttribute('aria-disabled')==='true'){e.preventDefault();return;}
- const rm=e.target.closest('[data-rm]');if(rm){S.slots.splice(+rm.dataset.rm,1);save('slots');renderTiles();return;}
- if(e.target.closest('#addSlot')){S.slots.push({n:t('new_site'),u:''});save('slots');renderTiles();const ins=$$('#tiles input[data-f=n]');ins[ins.length-1]?.select();}
+ const rm=e.target.closest('[data-rm]');if(rm){const id=rm.dataset.rm;mutateSlots(slots=>{const i=slots.findIndex(s=>s.id===id);if(i>=0)slots.splice(i,1);});return;}
+ if(e.target.closest('#addSlot')){const entry={id:crypto.randomUUID(),n:t('new_site'),u:''};mutateSlots(slots=>{if(slots.length<12)slots.push(entry);}).then(()=>{
+  if(editing)$$('#tiles input[data-f=n]').find(el=>el.dataset.id===entry.id)?.select();});}
 });
 $('#tiles').addEventListener('error',e=>{if(e.target.matches('.site-favicon'))e.target.hidden=true;},true);
-$('#tiles').addEventListener('input',e=>{const el=e.target;if(!el.dataset.f)return;const i=+el.dataset.i;
- if(el.dataset.f==='n')S.slots[i].n=el.value;else S.slots[i].u=el.value;save('slots');
- const he=el.closest('.ed')?.querySelector('.ehost');if(he)he.textContent=host(S.slots[i].u)||'—';});
-$('#tiles').addEventListener('focusout',e=>{if(e.target.dataset.f==='u'){const i=+e.target.dataset.i;S.slots[i].u=norm(e.target.value);e.target.value=S.slots[i].u;save('slots');const he=e.target.closest('.ed')?.querySelector('.ehost');if(he)he.textContent=host(S.slots[i].u)||'—';}});
+$('#tiles').addEventListener('input',e=>{const el=e.target;if(!el.dataset.f)return;
+ const id=el.dataset.id,field=el.dataset.f,value=el.value;
+ mutateSlots(slots=>{const slot=slots.find(s=>s.id===id);if(slot)slot[field]=value;});});
+$('#tiles').addEventListener('focusout',e=>{const el=e.target;if(!renderingTiles&&el.dataset.f==='u'){
+ const id=el.dataset.id,value=norm(el.value);el.value=value;
+ mutateSlots(slots=>{const slot=slots.find(s=>s.id===id);if(slot)slot.u=value;});}});
+addEventListener('storage',e=>{if(e.key==='te01.slots'||e.key===null){S.slots=readSlots();renderTiles();}});
 function updateEditBtn(){$('#editLbl').textContent=editing?t('done'):t('edit');$('#editBtn').classList.toggle('on',editing);}
 $('#editBtn').onclick=()=>{editing=!editing;updateEditBtn();renderTiles();};
 
 /* ---------------- weather ---------------- */
-let live=null,liveCache={},wxStatus='syncing',wxTime='--:--',tempAnim;
+let live=null,liveCache={},wxStatus='syncing',wxTime='--:--',tempAnim,wxAbort=null,wxRequest=0;
 const cv=c=>S.unit==='C'?Math.round(c):Math.round(c*9/5+32);
 const locKey=()=>S.loc.lat+','+S.loc.lon;
 function wmo(c){if(c===0)return'clear';if(c===1)return'clear';if(c===2)return'partly';if(c===3)return'cloud';
@@ -127,19 +145,27 @@ function getWX(){const L=S.loc,k=locKey();
  if(liveCache[k])return{...L,...liveCache[k]};
  return{...L,empty:true};}
 async function loadWeather(){
+ if(wxAbort)wxAbort.abort();
+ const request=++wxRequest,location={...S.loc},key=location.lat+','+location.lon;
+ const ctrl=new AbortController();wxAbort=ctrl;
+ const timeout=setTimeout(()=>ctrl.abort(),8000);
  live=null;wxStatus='syncing';$('#wxUpd').textContent=t('syncing');
- const u=`https://api.open-meteo.com/v1/forecast?latitude=${S.loc.lat}&longitude=${S.loc.lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=1`;
+ const u=`https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=2`;
  try{
-  const ctrl=new AbortController(),to=setTimeout(()=>ctrl.abort(),8000);
-  const r=await fetch(u,{signal:ctrl.signal});clearTimeout(to);if(!r.ok)throw 0;const d=await r.json();
+  const r=await fetch(u,{signal:ctrl.signal});if(!r.ok)throw 0;const d=await r.json();
+  if(request!==wxRequest||key!==locKey()||ctrl.signal.aborted)return;
   const c=d.current,kind=wmo(c.weather_code);
-  const base=(c.time||'').slice(0,13);let idx=d.hourly.time.findIndex(x=>x.slice(0,13)===base);if(idx<0)idx=new Date().getHours();
-  const hs=[],ic=[];for(let i=0;i<6;i++){const j=Math.min(idx+i,d.hourly.time.length-1);hs.push(Math.round(d.hourly.temperature_2m[j]));ic.push(wmo(d.hourly.weather_code[j]));}
-  live={key:locKey(),cond:kind,t:Math.round(c.temperature_2m),feels:Math.round(c.apparent_temperature),hi:Math.round(d.daily.temperature_2m_max[0]),lo:Math.round(d.daily.temperature_2m_min[0]),wind:Math.round(c.wind_speed_10m),hrs:hs,ic};
+  const base=(c.time||'').slice(0,13),idx=d.hourly.time.findIndex(x=>x.slice(0,13)===base);if(idx<0)throw new Error('Missing forecast hour');
+  const times=d.hourly.time.slice(idx,idx+6),hs=[],ic=[];
+  for(let i=0;i<times.length;i++){hs.push(Math.round(d.hourly.temperature_2m[idx+i]));ic.push(wmo(d.hourly.weather_code[idx+i]));}
+  live={key,cond:kind,t:Math.round(c.temperature_2m),feels:Math.round(c.apparent_temperature),hi:Math.round(d.daily.temperature_2m_max[0]),lo:Math.round(d.daily.temperature_2m_min[0]),wind:Math.round(c.wind_speed_10m),hrs:hs,ic,times};
   liveCache[live.key]=live;wxStatus='ok';const n=new Date();wxTime=pad(n.getHours())+':'+pad(n.getMinutes());
  }catch(e){
-  if(liveCache[locKey()]){live={...liveCache[locKey()],key:locKey()};wxStatus='stale';}
-  else wxStatus=(S.loc.key&&STATIC[S.loc.key])?'offline':'empty';
+  if(request!==wxRequest||key!==locKey())return;
+  if(liveCache[key]){live={...liveCache[key],key};wxStatus='stale';}
+  else wxStatus=(location.key&&STATIC[location.key])?'offline':'empty';
+ }finally{
+  clearTimeout(timeout);if(request===wxRequest)wxAbort=null;
  }
  renderWX(wxStatus==='ok');
 }
@@ -178,15 +204,16 @@ function renderWX(animate=true){
  if(!animate||RM)el.innerHTML=target+'<sup>°</sup>';
  else{let i=0;tempAnim=setInterval(()=>{i++;el.innerHTML=Math.round(from+(target-from)*(i/14))+'<sup>°</sup>';if(i>=14)clearInterval(tempAnim)},22);}
  const now=new Date(),mn=Math.min(...w.hrs),mx=Math.max(...w.hrs)||1;
- $('#wxHours').innerHTML=w.hrs.map((tt,idx)=>{const h=(now.getHours()+idx)%24,hgt=8+Math.round(((tt-mn)/((mx-mn)||1))*24);
-  return `<div class="hr${idx===0?' now':''}"><span class="ht">${idx===0?t('now'):pad(h)}</span><span class="hi">${icon(w.ic[idx],18)}</span><span class="bar" style="height:${hgt}px"></span><span class="hv dsp">${cv(tt)}°</span></div>`;}).join('');
+ $('#wxHours').innerHTML=w.hrs.map((tt,idx)=>{const h=w.times?.[idx]?.slice(11,13)||pad((now.getHours()+idx)%24),hgt=8+Math.round(((tt-mn)/((mx-mn)||1))*24);
+  return `<div class="hr${idx===0?' now':''}"><span class="ht">${idx===0?t('now'):h}</span><span class="hi">${icon(w.ic[idx],18)}</span><span class="bar" style="height:${hgt}px"></span><span class="hv dsp">${cv(tt)}°</span></div>`;}).join('');
  const pre=wxStatus==='stale'?t('stale'):wxStatus==='offline'?t('offline'):t('upd');
  $('#wxUpd').textContent=pre+' '+wxTime;
 }
 
 /* ---------------- geocoding ---------------- */
-let geoAbort=null,geoTimer=null,geoItems=[],geoHL=-1;
-function closeGeo(){$('#geoList').classList.remove('show');geoHL=-1;}
+let geoAbort=null,geoTimer=null,geoItems=[],geoHL=-1,geoRequest=0;
+function closeGeo(){clearTimeout(geoTimer);geoTimer=null;if(geoAbort)geoAbort.abort();geoAbort=null;
+ geoRequest++;geoItems=[];$('#geoList').classList.remove('show');geoHL=-1;}
 function renderGeo(msg){
  const g=$('#geoList');
  if(msg){g.innerHTML=`<div class="geomsg">${esc(msg)}</div>`;g.classList.add('show');return;}
@@ -194,20 +221,22 @@ function renderGeo(msg){
  g.innerHTML=geoItems.map((r,i)=>`<button class="geoitem${i===geoHL?' hl':''}" data-gi="${i}"><b>${esc(r.name)}</b><span>${esc([r.admin1,r.country].filter(Boolean).join(' · '))||esc(r.country_code||'')} · ${(r.latitude).toFixed(2)}/${(r.longitude).toFixed(2)}</span></button>`).join('');
  g.classList.add('show');
 }
-async function runGeo(q){
- if(geoAbort)geoAbort.abort();
+async function runGeo(q,request){
+ if(request!==geoRequest||$('#locInput').value.trim()!==q||!drawer.classList.contains('open'))return;
  const ctrl=new AbortController();geoAbort=ctrl;
  try{
   const u=`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=${S.lang==='zh'?'zh':'en'}&format=json`;
   const r=await fetch(u,{signal:ctrl.signal});if(!r.ok)throw 0;const d=await r.json();
+  if(request!==geoRequest||ctrl.signal.aborted||$('#locInput').value.trim()!==q||!drawer.classList.contains('open'))return;
   geoItems=(d.results||[]).slice(0,6);geoHL=geoItems.length?0:-1;
   if(!geoItems.length)renderGeo(t('geo_none'));else renderGeo();
- }catch(e){if(e.name==='AbortError')return;geoItems=[];renderGeo(t('geo_err'));}
+ }catch(e){if(e.name==='AbortError'||request!==geoRequest)return;geoItems=[];renderGeo(t('geo_err'));}
+ finally{if(geoAbort===ctrl)geoAbort=null;}
 }
 $('#locInput').addEventListener('input',e=>{
- const q=e.target.value.trim();clearTimeout(geoTimer);
- if(q.length<2){closeGeo();geoItems=[];return;}
- geoTimer=setTimeout(()=>runGeo(q),350);
+ const q=e.target.value.trim();closeGeo();
+ if(q.length<2)return;
+ const request=geoRequest;geoTimer=setTimeout(()=>runGeo(q,request),350);
 });
 $('#locInput').addEventListener('keydown',e=>{
  if(e.key==='ArrowDown'){e.preventDefault();if(geoItems.length){geoHL=(geoHL+1)%geoItems.length;renderGeo();}}
@@ -232,7 +261,7 @@ const isoWeek=d=>{const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()+
 function tick(){const d=new Date();let h=d.getHours();if(S.clock==='12')h=h%12||12;
  $('#clkH').textContent=S.clock==='12'?String(h):pad(d.getHours());$('#clkM').textContent=pad(d.getMinutes());$('#clkS').textContent=pad(d.getSeconds());
  $('#railClock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
- const W=S.lang==='zh'?['周','一','二','三','四','五','六']:WEEK_FULL_EN.map(x=>x.slice(0,3).toUpperCase());
+ const W=S.lang==='zh'?WEEK_FULL_ZH:WEEK_FULL_EN.map(x=>x.slice(0,3).toUpperCase());
  const M=S.lang==='zh'?(d.getMonth()+1)+'月':MONTH_FULL_EN[d.getMonth()].slice(0,3).toUpperCase();
  $('#mDate').textContent=S.lang==='zh'?`${d.getFullYear()}年${M}${d.getDate()}日 ${W[d.getDay()]}`:`${W[d.getDay()]} ${d.getDate()} ${M} ${d.getFullYear()}`;
  $('#mWeek').textContent=(S.lang==='zh'?'第':'WEEK ')+pad(isoWeek(d))+(S.lang==='zh'?'周':'');
@@ -241,6 +270,7 @@ function tick(){const d=new Date();let h=d.getHours();if(S.clock==='12')h=h%12||
  const bucket=H<5?'still':H<11?'morning':H<14?'noon':H<19?'afternoon':'evening';
  $('#mGreet').innerHTML=`${g[bucket]}<span>, ${esc(S.cs)}</span><i>.</i>`;
  const up=Math.floor((Date.now()-t0)/1000);$('#uptime').textContent=pad(Math.floor(up/3600))+':'+pad(Math.floor(up/60)%60)+':'+pad(up%60);
+ syncToday(d);
 }
 
 /* ---------------- dot-matrix LCD (latin hardware font) ---------------- */
@@ -254,8 +284,15 @@ function lattice(x,W,H,p,r){for(let yy=p/2;yy<H;yy+=p)for(let xx=p/2;xx<W;xx+=p)
 function glyph(x,ch,ox,oy,p,r,c){const g=F[ch]||F[' '];const rows=g.split(' ');for(let ry=0;ry<7;ry++){const row=rows[ry]||'00000';for(let cx=0;cx<5;cx++)if(row[cx]==='1')dot(x,ox+cx*p,oy+ry*p,r,c)}}
 function text(x,str,ox,oy,p,r,c,ls=1){let cx=ox;for(const ch of str.toUpperCase()){glyph(x,ch,cx,oy,p,r,c);cx+=(5+ls)*p}return cx-ox-ls*p}
 function strW(str,p,ls=1){return str.length?(str.length*5+(str.length-1)*ls)*p:0}
-const TODAY=new Date();TODAY.setHours(0,0,0,0);
+let TODAY=new Date();TODAY.setHours(0,0,0,0);
 let view=new Date(TODAY.getFullYear(),TODAY.getMonth(),1),sel=new Date(TODAY),ML=null;
+function syncToday(now=new Date()){
+ const next=new Date(now.getFullYear(),now.getMonth(),now.getDate());if(next.getTime()===TODAY.getTime())return;
+ const followSelection=sel.getTime()===TODAY.getTime(),followMonth=followSelection&&view.getFullYear()===TODAY.getFullYear()&&view.getMonth()===TODAY.getMonth();
+ TODAY=next;if(followSelection)sel=new Date(TODAY);
+ if(followMonth)view=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);
+ drawLCD();renderCaption();
+}
 function drawHero(){const c=$('#heroCal');const{x,W,H}=setup(c);lattice(x,W,H,Math.max(4,W*0.022),1.1);
  const np=Math.max(5,Math.min(9,W*0.021)),nr=np*0.34,day=String(TODAY.getDate());
  text(x,day,W*0.04,(H-7*np)/2,np,nr,BONE);
@@ -272,12 +309,11 @@ function drawMonth(){const c=$('#monthCal');const W=c.clientWidth,padX=4,padTop=
  ML={p,r,padX,padTop,cellW,cellH,gapX,gapY,headH,start,dim,dates:[]};
  for(let col=0;col<7;col++){const lw=strW(WK_LET[col],p,0),lx=padX+col*(cellW+gapX)+(cellW-lw)/2;text(x,WK_LET[col],lx,padTop,p,r,(col===0||col===6)?WEL:DIM,0)}
  const oy0=padTop+headH+gapY*2;
- for(let i=0;i<weeks*7;i++){const col=i%7,row=(i/7)|0,dn=i-start+1;let dt,out=false;
-  if(dn<1){dt=new Date(view.getFullYear(),view.getMonth()-1,dn);out=true}else if(dn>dim){dt=new Date(view.getFullYear(),view.getMonth()+1,dn-dim);out=true}else dt=new Date(view.getFullYear(),view.getMonth(),dn);
+ for(let i=0;i<weeks*7;i++){const col=i%7,row=(i/7)|0,dn=i-start+1,dt=new Date(view.getFullYear(),view.getMonth(),dn),out=dn<1||dn>dim;
   ML.dates[i]=dt;
   const cx=padX+col*(cellW+gapX),cy=oy0+row*(cellH+gapY);
   const isT=dt.toDateString()===TODAY.toDateString(),isS=dt.toDateString()===sel.toDateString();
-  const s=String(dn),sw=strW(s,p,1),tx=cx+(cellW-sw)/2;
+  const s=String(dt.getDate()),sw=strW(s,p,1),tx=cx+(cellW-sw)/2;
   const col2=isT?accent():out?FAINT:(dt.getDay()===0||dt.getDay()===6)?'rgba(239,238,233,.55)':BONE;
   text(x,s,tx,cy,p,r,col2);
   if(isT||isS){const rc=isT?accent():'rgba(239,238,233,.7)',x0=cx-p,x1=cx+cellW,y0=cy-p,y1=cy+cellH;
@@ -297,7 +333,7 @@ $('#monthCal').addEventListener('click',e=>{if(!ML)return;const rc=e.currentTarg
  if(d.getMonth()!==view.getMonth()||d.getFullYear()!==view.getFullYear())view=new Date(d.getFullYear(),d.getMonth(),1);drawMonth();});
 $('#prevM').onclick=()=>{view.setMonth(view.getMonth()-1);drawMonth()};
 $('#nextM').onclick=()=>{view.setMonth(view.getMonth()+1);drawMonth()};
-$('#todayBtn').onclick=()=>{view=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);sel=new Date(TODAY);drawMonth()};
+$('#todayBtn').onclick=()=>{syncToday();view=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);sel=new Date(TODAY);drawMonth()};
 
 /* ---------------- segmented + apply ---------------- */
 function placeInd(seg){const on=seg.querySelector('button.on');if(!on)return;const ind=seg.querySelector('.ind');ind.style.width=on.offsetWidth+'px';ind.style.transform=`translateX(${on.offsetLeft-3}px)`}
@@ -328,14 +364,20 @@ $('#themeBtn').onclick=()=>{S.theme=S.theme==='light'?'dark':'light';save('theme
 $('#unitBtn').onclick=()=>{S.unit=S.unit==='C'?'F':'C';save('unit');applyAll()};
 $('#fmtBtn').onclick=()=>{S.clock=S.clock==='24'?'12':'24';save('clock');applyAll()};
 $('#csInput').oninput=e=>{S.cs=e.target.value.trim()||'friend';save('cs');tick()};
-$('#resetBtn').onclick=()=>{store.clear();Object.assign(S,DEF);S.loc={...DEFAULT_LOC};S.slots=DEF_SLOTS_INIT();editing=false;live=null;applyAll();loadWeather();};
+$('#resetBtn').onclick=async()=>{await navigator.locks.request('te01.slots',()=>{store.clear();Object.assign(S,DEF);S.loc={...DEFAULT_LOC};S.slots=readSlots();editing=false;live=null;applyAll();});loadWeather();};
 const drawer=$('#drawer');
-function openDrawer(){drawer.classList.add('open');$('#setBtn').setAttribute('aria-expanded',true);$('#setBtn').classList.add('on')}
-$('#setBtn').onclick=e=>{e.stopPropagation();const o=drawer.classList.toggle('open');$('#setBtn').setAttribute('aria-expanded',o);$('#setBtn').classList.toggle('on',o)};
-document.addEventListener('click',e=>{if(drawer.classList.contains('open')&&!drawer.contains(e.target)&&!e.target.closest('#setBtn')&&!e.target.closest('#locateBtn')){drawer.classList.remove('open');$('#setBtn').classList.remove('on');closeGeo()}});
+function setDrawerOpen(open){
+ if(!open&&drawer.contains(document.activeElement))$('#setBtn').focus({preventScroll:true});
+ drawer.inert=!open;drawer.setAttribute('aria-hidden',String(!open));drawer.classList.toggle('open',open);
+ $('#setBtn').setAttribute('aria-expanded',String(open));$('#setBtn').classList.toggle('on',open);
+ if(!open)closeGeo();
+}
+function openDrawer(){setDrawerOpen(true)}
+$('#setBtn').onclick=e=>{e.stopPropagation();setDrawerOpen(!drawer.classList.contains('open'))};
+document.addEventListener('click',e=>{if(drawer.classList.contains('open')&&!drawer.contains(e.target)&&!e.target.closest('#setBtn')&&!e.target.closest('#locateBtn'))setDrawerOpen(false)});
 document.addEventListener('keydown',e=>{const ty=/INPUT|TEXTAREA|SELECT/.test(e.target.tagName);
  if(e.key==='/'&&!ty){e.preventDefault();qEl.focus();qEl.select()}
- if(e.key==='Escape'){drawer.classList.remove('open');$('#setBtn').classList.remove('on');closeGeo();qEl.blur()}
+ if(e.key==='Escape'){setDrawerOpen(false);qEl.blur()}
  if(!ty&&!editing&&/^[1-9]$/.test(e.key)){const s=S.slots[+e.key-1],url=s&&norm(s.u);if(s&&url){const tt=$(`.tile[data-i="${+e.key-1}"]`);if(tt){tt.style.transform='translateY(1px) scale(.97)';setTimeout(()=>tt.style.transform='',130)}window.open(url,'_blank','noopener')}}});
 addEventListener('resize',()=>{$$('[data-group]').forEach(placeInd);drawLCD()});
 
@@ -349,6 +391,7 @@ $$('[data-reveal]').forEach(el=>io.observe(el));
 
 /* ---------------- boot ---------------- */
 applyAll();tick();setInterval(tick,1000);loadWeather();
+document.addEventListener('visibilitychange',()=>{if(!document.hidden)tick()});
 setTimeout(()=>$$('[data-group]').forEach(placeInd),120);
 document.fonts&&document.fonts.ready.then(()=>{$$('[data-group]').forEach(placeInd);drawLCD()});
 })();

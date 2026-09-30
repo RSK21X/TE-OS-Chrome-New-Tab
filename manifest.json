@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "TE·OS New Tab",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A focused dashboard for your Chrome new tab.",
   "chrome_url_overrides": {
     "newtab": "index.html"
