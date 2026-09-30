@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
-  "name": "TE·OS New Tab",
-  "version": "1.0.1",
-  "description": "A focused dashboard for your Chrome new tab.",
+  "name": "TE·OS — Desktop Instrument",
+  "version": "1.1.0",
+  "description": "A hardware-inspired new tab with a segment clock, shortcut keys, forecast faders and a dot-matrix calendar.",
   "chrome_url_overrides": {
     "newtab": "index.html"
   },

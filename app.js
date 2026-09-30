@@ -16,6 +16,9 @@ const DICT={
   now:'NOW',feels:'feels',upd:'UPD',syncing:'SYNC…',offline:'OFFLINE',nodata:'NO DATA',stale:'CACHE',
   theme_light:'LGT',theme_dark:'DK',theme_bone:'Bone',theme_graphite:'Graphite',new_site:'New site',
   locate:'Find a station',lang_btn:'EN',lang_tip:'Switch to 中文',tip_unit:'Temperature unit',tip_clock:'Clock format',
+  instrument_desc:'A little space for every day.',bank_hint:'Your places. One key away.',
+  forecast_hint:'Select an hour',forecast_label:'Forecast hour',station_hint:'CITY / SELECT',forecast:'Hourly forecast',
+  local_time:'Local time',next_month:'Next month',prev_month:'Previous month',cal_keys:'Use arrow keys to select a date.',
   greet:{still:'Still up',morning:'Good morning',noon:'Good afternoon',afternoon:'Good day',evening:'Good evening'}},
  zh:{model:'仪表盘 · 型号 01',link:'链路',sys:'系统',uptime:'运行',pwr:'电源',setup:'设置',
   search_tag:'搜索',shortcuts_tag:'快捷方式',weather_tag:'天气',calendar_tag:'日历',
@@ -27,6 +30,9 @@ const DICT={
   now:'现在',feels:'体感',upd:'更新',syncing:'同步…',offline:'离线',nodata:'无数据',stale:'缓存',
   theme_light:'明',theme_dark:'暗',theme_bone:'骨白',theme_graphite:'石墨',new_site:'新站点',
   locate:'查找站点',lang_btn:'中',lang_tip:'Switch to English',tip_unit:'温度单位',tip_clock:'时间制式',
+  instrument_desc:'每一天，都有自己的节奏。',bank_hint:'常去的地方，一键抵达。',
+  forecast_hint:'选择预报时段',forecast_label:'预报时段',station_hint:'城市 / 选择',forecast:'逐小时预报',
+  local_time:'本地时间',next_month:'下个月',prev_month:'上个月',cal_keys:'使用方向键选择日期。',
   greet:{still:'还没睡',morning:'早上好',noon:'中午好',afternoon:'下午好',evening:'晚上好'}}
 };
 const t=k=>DICT[S.lang][k]??k;
@@ -68,7 +74,6 @@ function DEF_SLOTS_INIT(){return[
  {n:'Figma',u:'https://figma.com'},{n:'Maps',u:'https://maps.google.com'},{n:'Wikipedia',u:'https://wikipedia.org'}];}
 
 /* ---------------- shortcuts ---------------- */
-const PAL=['#E5432F','#E02F2F','#3B3B3B','#F0A700','#1F1E1C','#12A882','#D64A2B','#2E8B57','#1467E6','#7A4BD1','#B4286A','#0E8FA8'];
 const norm=value=>{
  const raw=String(value??'').trim();if(!raw)return'';
  const candidate=/^https?:\/\//i.test(raw)?raw:'https://'+raw;
@@ -95,10 +100,10 @@ function renderTiles(){
  if(!editing){
   c.innerHTML=S.slots.map((s,i)=>{
    const url=norm(s.u),name=String(s.n||'').trim()||host(s.u)||t('new_site');
-   return `<a class="tile" style="--tint:${PAL[i%PAL.length]}" href="${esc(url||'#')}" aria-disabled="${!url}" target="_blank" rel="noopener" data-i="${i}">
-   <span class="idx">${pad(i+1)}</span>
+   return `<a class="tile" href="${esc(url||'#')}" aria-disabled="${!url}" target="_blank" rel="noopener" data-i="${i}">
+   <span class="pad-face"><span class="idx">${pad(i+1)}</span>
    <span class="ico"><span class="site-mark" aria-hidden="true">${esc(name.slice(0,1).toUpperCase())}</span>${url?`<img class="site-favicon" src="${esc(favicon(url))}" alt="" loading="lazy" decoding="async" referrerpolicy="no-referrer">`:''}</span>
-   <span class="nm">${esc(name)}</span><span class="dm">${esc(host(s.u))}</span></a>`;
+   </span><span class="tile-label"><span class="tile-led" aria-hidden="true"></span><span class="nm">${esc(name)}</span></span><span class="dm">${esc(host(s.u))}</span></a>`;
   }).join('');
  }else{
   let h=S.slots.map((s,i)=>`<div class="tile ed" data-i="${i}" data-id="${esc(s.id)}">
@@ -133,7 +138,7 @@ function updateEditBtn(){$('#editLbl').textContent=editing?t('done'):t('edit');$
 $('#editBtn').onclick=()=>{editing=!editing;updateEditBtn();renderTiles();};
 
 /* ---------------- weather ---------------- */
-let live=null,liveCache={},wxStatus='syncing',wxTime='--:--',tempAnim,wxAbort=null,wxRequest=0;
+let live=null,liveCache={},wxStatus='syncing',wxTime='--:--',tempAnim,wxAbort=null,wxRequest=0,forecastHour=0;
 const cv=c=>S.unit==='C'?Math.round(c):Math.round(c*9/5+32);
 const locKey=()=>S.loc.lat+','+S.loc.lon;
 function wmo(c){if(c===0)return'clear';if(c===1)return'clear';if(c===2)return'partly';if(c===3)return'cloud';
@@ -149,7 +154,7 @@ async function loadWeather(){
  const request=++wxRequest,location={...S.loc},key=location.lat+','+location.lon;
  const ctrl=new AbortController();wxAbort=ctrl;
  const timeout=setTimeout(()=>ctrl.abort(),8000);
- live=null;wxStatus='syncing';$('#wxUpd').textContent=t('syncing');
+ live=null;forecastHour=0;wxStatus='syncing';renderWX(false);$('#wxUpd').textContent=t('syncing');
  const u=`https://api.open-meteo.com/v1/forecast?latitude=${location.lat}&longitude=${location.lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m&hourly=temperature_2m,weather_code&daily=temperature_2m_max,temperature_2m_min&timezone=auto&forecast_days=2`;
  try{
   const r=await fetch(u,{signal:ctrl.signal});if(!r.ok)throw 0;const d=await r.json();
@@ -186,6 +191,12 @@ function icon(kind,size){
 }
 function renderWX(animate=true){
  const w=getWX();
+ const selector=$('#forecastSelect');selector.disabled=!!w.empty;
+ selector.max=Math.max(0,(w.hrs?.length||1)-1);forecastHour=Math.min(forecastHour,+selector.max);selector.value=forecastHour;
+ $('#faderUnit').textContent=S.unit;
+ const now=new Date(),hourLabel=i=>i===0?t('now'):((w.times?.[i]?.slice(11,13)||pad((now.getHours()+i)%24))+':00');
+ const selectedLabel=hourLabel(forecastHour);$('#forecastSelected').textContent=selectedLabel;$('#forecastTime').textContent=selectedLabel;
+ selector.setAttribute('aria-valuetext',selectedLabel);
  $('#wxCity').textContent=w.name;
  $('#wxCode').textContent=`${w.ref||'·'} · ${(+w.lat).toFixed(2)} / ${(+w.lon).toFixed(2)}`;
  $('#mCity').textContent=(w.name||'').toUpperCase();
@@ -195,20 +206,22 @@ function renderWX(animate=true){
   $('#wxIcon').innerHTML=icon('cloud',74);
   $('#wxCond').textContent=t('nodata');
   $('#wxHi').textContent='—';$('#wxLo').textContent='—';$('#wxWind').textContent='—';
-  $('#wxHours').innerHTML='';$('#wxUpd').textContent=t('nodata');return;
+  $('#wxHours').innerHTML=`<span class="weather-empty">${esc(t('nodata'))}</span>`;$('#wxUpd').textContent=wxStatus==='syncing'?t('syncing'):t('nodata');return;
  }
- $('#wxCond').textContent=`${cLabel(w.cond)} · ${t('feels')} ${cv(w.feels)}°`;
+ $('#wxCond').textContent=forecastHour===0?`${cLabel(w.cond)} · ${t('feels')} ${cv(w.feels)}°`:`${cLabel(w.ic[forecastHour])} · ${t('forecast')}`;
  $('#wxHi').textContent=cv(w.hi)+'°';$('#wxLo').textContent=cv(w.lo)+'°';$('#wxWind').textContent=w.wind+' KM/H';
- $('#wxIcon').innerHTML=icon(w.cond,74);
- const target=cv(w.t),from=parseInt(el.textContent)||target;clearInterval(tempAnim);
+ $('#wxIcon').innerHTML=icon(forecastHour===0?w.cond:w.ic[forecastHour],74);
+ const target=cv(forecastHour===0?w.t:w.hrs[forecastHour]),from=parseInt(el.textContent)||target;clearInterval(tempAnim);
  if(!animate||RM)el.innerHTML=target+'<sup>°</sup>';
  else{let i=0;tempAnim=setInterval(()=>{i++;el.innerHTML=Math.round(from+(target-from)*(i/14))+'<sup>°</sup>';if(i>=14)clearInterval(tempAnim)},22);}
- const now=new Date(),mn=Math.min(...w.hrs),mx=Math.max(...w.hrs)||1;
- $('#wxHours').innerHTML=w.hrs.map((tt,idx)=>{const h=w.times?.[idx]?.slice(11,13)||pad((now.getHours()+idx)%24),hgt=8+Math.round(((tt-mn)/((mx-mn)||1))*24);
-  return `<div class="hr${idx===0?' now':''}"><span class="ht">${idx===0?t('now'):h}</span><span class="hi">${icon(w.ic[idx],18)}</span><span class="bar" style="height:${hgt}px"></span><span class="hv dsp">${cv(tt)}°</span></div>`;}).join('');
+ const mn=Math.min(...w.hrs),mx=Math.max(...w.hrs);
+ $('#wxHours').innerHTML=w.hrs.map((tt,idx)=>{const h=w.times?.[idx]?.slice(11,13)||pad((now.getHours()+idx)%24),level=14+Math.round(((tt-mn)/((mx-mn)||1))*72);
+  return `<button type="button" class="hr${idx===0?' now':''}" data-hour="${idx}" aria-pressed="${idx===forecastHour}" aria-label="${esc(hourLabel(idx)+' · '+cv(tt)+'°'+S.unit+' · '+cLabel(w.ic[idx]))}"><span class="ht">${idx===0?t('now'):h}</span><span class="hi">${icon(w.ic[idx],18)}</span><span class="fader-track" aria-hidden="true"><span class="fader-cap" style="--level:${level}%"></span></span><span class="hv dsp">${cv(tt)}°</span></button>`;}).join('');
  const pre=wxStatus==='stale'?t('stale'):wxStatus==='offline'?t('offline'):t('upd');
- $('#wxUpd').textContent=pre+' '+wxTime;
+ $('#wxUpd').textContent=wxStatus==='syncing'?t('syncing'):pre+' '+wxTime;
 }
+$('#forecastSelect').addEventListener('input',e=>{forecastHour=+e.target.value;renderWX(false)});
+$('#wxHours').addEventListener('click',e=>{const b=e.target.closest('[data-hour]');if(b){forecastHour=+b.dataset.hour;renderWX(false);$('#wxHours').querySelector(`[data-hour="${forecastHour}"]`)?.focus({preventScroll:true})}});
 
 /* ---------------- geocoding ---------------- */
 let geoAbort=null,geoTimer=null,geoItems=[],geoHL=-1,geoRequest=0;
@@ -258,7 +271,17 @@ $('#locateBtn').onclick=()=>{openDrawer();const i=$('#locInput');i.focus();i.sel
 /* ---------------- clock ---------------- */
 const t0=Date.now();
 const isoWeek=d=>{const x=new Date(d);x.setHours(0,0,0,0);x.setDate(x.getDate()+3-(x.getDay()+7)%7);const f=new Date(x.getFullYear(),0,4);return 1+Math.round(((x-f)/86400000-3+(f.getDay()+7)%7)/7)};
+const SEGMENTS={a:'9,2 35,2 39,6 35,10 9,10 5,6',b:'38,8 42,12 42,32 38,36 34,32 34,12',c:'38,40 42,44 42,64 38,68 34,64 34,44',d:'9,66 35,66 39,70 35,74 9,74 5,70',e:'6,40 10,44 10,64 6,68 2,64 2,44',f:'6,8 10,12 10,32 6,36 2,32 2,12',g:'9,34 35,34 39,38 35,42 9,42 5,38'};
+const DIGITS=['abcdef','bc','abdeg','abcdg','bcfg','acdfg','acdefg','abc','abcdefg','abcdfg'];
+let lastClock='';
+function drawClock(h,m,s){const value=pad(h)+pad(m)+pad(s);if(value===lastClock)return;lastClock=value;
+ const digit=n=>`<svg class="segment-digit" viewBox="0 0 44 76" aria-hidden="true">${Object.entries(SEGMENTS).map(([key,points])=>`<polygon class="${DIGITS[+n].includes(key)?'seg-lit':'seg-off'}" points="${points}"/>`).join('')}</svg>`;
+ const pair=str=>`<span class="clock-pair">${[...str].map(digit).join('')}</span>`;
+ $('#segmentClock').innerHTML=pair(value.slice(0,2))+'<svg class="segment-colon" viewBox="0 0 10 76" aria-hidden="true"><rect x="2" y="24" width="6" height="6" rx="1"/><rect x="2" y="46" width="6" height="6" rx="1"/></svg>'+pair(value.slice(2,4))+`<span class="clock-seconds">${[...value.slice(4)].map(digit).join('')}</span>`;
+ $('#segmentClock').setAttribute('aria-label',`${h}:${pad(m)}:${pad(s)}`);
+}
 function tick(){const d=new Date();let h=d.getHours();if(S.clock==='12')h=h%12||12;
+ drawClock(h,d.getMinutes(),d.getSeconds());$('#clockPeriod').textContent=S.clock==='24'?'24H':d.getHours()<12?'AM':'PM';
  $('#clkH').textContent=S.clock==='12'?String(h):pad(d.getHours());$('#clkM').textContent=pad(d.getMinutes());$('#clkS').textContent=pad(d.getSeconds());
  $('#railClock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());
  const W=S.lang==='zh'?WEEK_FULL_ZH:WEEK_FULL_EN.map(x=>x.slice(0,3).toUpperCase());
@@ -304,6 +327,8 @@ function drawHero(){const c=$('#heroCal');const{x,W,H}=setup(c);lattice(x,W,H,Ma
 function drawMonth(){const c=$('#monthCal');const W=c.clientWidth,padX=4,padTop=4;
  const p=Math.max(2.4,(W-padX*2)/89),r=p*0.36,cellW=11*p,cellH=7*p,gapX=2*p,gapY=2*p,headH=7*p;
  const first=new Date(view.getFullYear(),view.getMonth(),1),start=first.getDay(),dim=new Date(view.getFullYear(),view.getMonth()+1,0).getDate();
+ $('#calendarMonth').textContent=`CAL / ${MON_ABBR[view.getMonth()]} ${view.getFullYear()}`;
+ c.setAttribute('aria-label',`${S.lang==='zh'?`${view.getFullYear()}年${view.getMonth()+1}月`:`${MONTH_FULL_EN[view.getMonth()]} ${view.getFullYear()}`} · ${sel.toLocaleDateString(S.lang==='zh'?'zh-CN':'en-US')} · ${t('cal_keys')}`);
  const weeks=Math.ceil((start+dim)/7),H=padTop+headH+gapY*2+weeks*(cellH+gapY);
  c.style.height=H+'px';const{x}=setup(c);lattice(x,W,H,p,r);
  ML={p,r,padX,padTop,cellW,cellH,gapX,gapY,headH,start,dim,dates:[]};
@@ -334,6 +359,11 @@ $('#monthCal').addEventListener('click',e=>{if(!ML)return;const rc=e.currentTarg
 $('#prevM').onclick=()=>{view.setMonth(view.getMonth()-1);drawMonth()};
 $('#nextM').onclick=()=>{view.setMonth(view.getMonth()+1);drawMonth()};
 $('#todayBtn').onclick=()=>{syncToday();view=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);sel=new Date(TODAY);drawMonth()};
+$('#monthCal').addEventListener('keydown',e=>{const offsets={ArrowLeft:-1,ArrowRight:1,ArrowUp:-7,ArrowDown:7};
+ if(e.key in offsets){e.preventDefault();if(sel.getMonth()!==view.getMonth()||sel.getFullYear()!==view.getFullYear())sel=new Date(view.getFullYear(),view.getMonth(),1);
+  sel.setDate(sel.getDate()+offsets[e.key]);view=new Date(sel.getFullYear(),sel.getMonth(),1);drawMonth();}
+ else if(e.key==='Home'){e.preventDefault();sel=new Date(TODAY);view=new Date(TODAY.getFullYear(),TODAY.getMonth(),1);drawMonth();}
+});
 
 /* ---------------- segmented + apply ---------------- */
 function placeInd(seg){const on=seg.querySelector('button.on');if(!on)return;const ind=seg.querySelector('.ind');ind.style.width=on.offsetWidth+'px';ind.style.transform=`translateX(${on.offsetLeft-3}px)`}
@@ -345,12 +375,15 @@ function applyLang(){const d=DICT[S.lang];document.documentElement.lang=S.lang==
  $$('[data-i18n-ph]').forEach(e=>{const k=e.dataset.i18nPh;if(d[k]!=null)e.placeholder=d[k];});
  $$('[data-i18n-title]').forEach(e=>{const k=e.dataset.i18nTitle;if(d[k]!=null)e.title=d[k];});
  $('#langBtn').lastElementChild.textContent=d.lang_btn;
+ $('#langBtn').setAttribute('aria-label',d.lang_tip);$('#unitBtn').setAttribute('aria-label',d.tip_unit);$('#locateBtn').setAttribute('aria-label',d.locate);
+ $('#prevM').setAttribute('aria-label',d.prev_month);$('#nextM').setAttribute('aria-label',d.next_month);$('#forecastSelect').setAttribute('aria-label',d.forecast_label);
  if(document.activeElement!==$('#locInput'))$('#locInput').value=S.loc.name;
  renderChips();renderTiles();updateEditBtn();renderWX(false);drawLCD();renderCaption();tick();
 }
 function applyAll(){document.documentElement.dataset.theme=S.theme;const e=ENG[S.engine],rs=document.documentElement.style;
  rs.setProperty('--eng',e.c);rs.setProperty('--eng-d',e.d);rs.setProperty('--eng-ring',e.r);$('#goBtn').textContent=e.n;
  $('#unitBtn').firstElementChild.textContent='°'+S.unit;$('#fmtBtn').firstElementChild.textContent=S.clock+'H';
+ $('#unitBtn').classList.toggle('is-fahrenheit',S.unit==='F');
  $('#csInput').value=S.cs;syncSegs();applyLang();}
 
 /* ---------------- search ---------------- */
@@ -380,14 +413,6 @@ document.addEventListener('keydown',e=>{const ty=/INPUT|TEXTAREA|SELECT/.test(e.
  if(e.key==='Escape'){setDrawerOpen(false);qEl.blur()}
  if(!ty&&!editing&&/^[1-9]$/.test(e.key)){const s=S.slots[+e.key-1],url=s&&norm(s.u);if(s&&url){const tt=$(`.tile[data-i="${+e.key-1}"]`);if(tt){tt.style.transform='translateY(1px) scale(.97)';setTimeout(()=>tt.style.transform='',130)}window.open(url,'_blank','noopener')}}});
 addEventListener('resize',()=>{$$('[data-group]').forEach(placeInd);drawLCD()});
-
-/* ---------------- life ---------------- */
-const meter=$('#meter');meter.innerHTML=Array.from({length:14},()=>'<i></i>').join('');const bars=$$('i',meter);
-if(!RM){setInterval(()=>{let l=Math.random();bars.forEach((b,i)=>{l=l*.72+Math.random()*.28+(i<4?.06:0);b.style.height=(3+l*21).toFixed(0)+'px';b.classList.toggle('hot',l>.72)})},150);
- let sg=0;setInterval(()=>{sg=(sg+1)%5;$('#railSig').textContent='▮'.repeat(3+(sg%3))+'▯'.repeat(2-(sg%3<2?sg%3:0))||'▮▮'},3200);
- let raf=null;addEventListener('pointermove',e=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=null;document.documentElement.style.setProperty('--mx',(e.clientX/innerWidth*100).toFixed(1)+'%');document.documentElement.style.setProperty('--my',(e.clientY/innerHeight*100).toFixed(1)+'%')})},{passive:true})}
-const io=new IntersectionObserver(es=>es.forEach(x=>{if(x.isIntersecting){x.target.classList.add('in');io.unobserve(x.target)}}),{threshold:.06,rootMargin:'0px 0px -40px'});
-$$('[data-reveal]').forEach(el=>io.observe(el));
 
 /* ---------------- boot ---------------- */
 applyAll();tick();setInterval(tick,1000);loadWeather();
